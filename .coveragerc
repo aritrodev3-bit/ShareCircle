@@ -1,0 +1,9 @@
+[run]
+source = backend/app
+concurrency = greenlet,thread
+omit =
+    */venv/*
+    */migrations/*
+
+[report]
+show_missing = True
