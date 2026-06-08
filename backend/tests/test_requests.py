@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 from uuid import uuid4
 
 import jwt
@@ -259,3 +260,104 @@ async def test_donor_phone_privacy():
 
     finally:
         await cleanup_users(email, donor_email)
+
+
+@pytest.mark.asyncio
+@patch("app.worker.tasks.send_pickup_confirmation.delay")
+@patch("app.worker.tasks.send_rejection_notification.delay")
+@patch("app.worker.tasks.send_approval_notification.delay")
+@patch("app.worker.tasks.send_request_notification.delay")
+async def test_request_lifecycle_celery_dispatch(
+    mock_request_notification,
+    mock_approval_notification,
+    mock_rejection_notification,
+    mock_pickup_confirmation,
+):
+    email_recip1 = f"recip1-{uuid4().hex}@example.com"
+    email_recip2 = f"recip2-{uuid4().hex}@example.com"
+    donor_email = f"donor-{uuid4().hex}@example.com"
+    
+    recipient1 = await create_user(email_recip1, UserRole.recipient)
+    recipient2 = await create_user(email_recip2, UserRole.recipient)
+    donor = await create_user(donor_email, UserRole.donor)
+    item = await create_item(donor, "Celery Test Item")
+
+    try:
+        async with request_test_client() as client:
+            # 1. Create request 1 (recipient 1) -> triggers request notification
+            resp1 = await client.post(
+                "/api/requests/",
+                json={"item_id": item.id, "message": "Want this"},
+                headers={"Authorization": f"Bearer {make_token(recipient1)}"},
+            )
+            assert resp1.status_code == 201
+            req1_id = resp1.json()["id"]
+            mock_request_notification.assert_called_once()
+            mock_request_notification.reset_mock()
+
+            # 2. Create request 2 (recipient 2) -> triggers request notification again
+            resp2 = await client.post(
+                "/api/requests/",
+                json={"item_id": item.id, "message": "Also want this"},
+                headers={"Authorization": f"Bearer {make_token(recipient2)}"},
+            )
+            assert resp2.status_code == 201
+            req2_id = resp2.json()["id"]
+            assert mock_request_notification.call_count == 1
+            mock_request_notification.reset_mock()
+
+            # 3. Approve request 1 -> triggers approval for req 1 AND auto-rejection for req 2
+            approve_resp = await client.patch(
+                f"/api/requests/{req1_id}/approve",
+                headers={"Authorization": f"Bearer {make_token(donor)}"},
+            )
+            assert approve_resp.status_code == 200
+            mock_approval_notification.assert_called_once()
+            mock_rejection_notification.assert_called_once()
+            mock_approval_notification.reset_mock()
+            mock_rejection_notification.reset_mock()
+
+            # 4. Confirm pickup -> triggers pickup confirmation to both
+            pickup_resp = await client.patch(
+                f"/api/requests/{req1_id}/pickup",
+                headers={"Authorization": f"Bearer {make_token(donor)}"},
+            )
+            assert pickup_resp.status_code == 200
+            mock_pickup_confirmation.assert_called_once()
+            
+    finally:
+        await cleanup_users(email_recip1, email_recip2, donor_email)
+
+
+@pytest.mark.asyncio
+@patch("app.worker.tasks.send_rejection_notification.delay")
+async def test_request_rejection_celery_dispatch(mock_rejection_notification):
+    email_recip = f"recip-{uuid4().hex}@example.com"
+    donor_email = f"donor-{uuid4().hex}@example.com"
+    
+    recipient = await create_user(email_recip, UserRole.recipient)
+    donor = await create_user(donor_email, UserRole.donor)
+    item = await create_item(donor, "Rejection Celery Test Item")
+
+    try:
+        async with request_test_client() as client:
+            # Create request
+            resp = await client.post(
+                "/api/requests/",
+                json={"item_id": item.id, "message": "Want this"},
+                headers={"Authorization": f"Bearer {make_token(recipient)}"},
+            )
+            assert resp.status_code == 201
+            req_id = resp.json()["id"]
+
+            # Reject request
+            reject_resp = await client.patch(
+                f"/api/requests/{req_id}/reject",
+                headers={"Authorization": f"Bearer {make_token(donor)}"},
+            )
+            assert reject_resp.status_code == 200
+            mock_rejection_notification.assert_called_once()
+            
+    finally:
+        await cleanup_users(email_recip, donor_email)
+
