@@ -116,6 +116,17 @@ async def create_request(
     # Reload with relationships — commit expires all attributes
     loaded = await _load_request(db, new_request.id)
     assert loaded is not None
+
+    # Dispatch email task to notify the donor
+    from app.worker.tasks import send_request_notification
+    send_request_notification.delay(
+        donor_email=loaded.item.donor.email,
+        donor_name=loaded.item.donor.full_name,
+        requester_name=loaded.requester.full_name,
+        item_title=loaded.item.title,
+        message=loaded.message or "",
+    )
+
     return loaded
 
 
@@ -156,8 +167,9 @@ async def approve_request(db: AsyncSession, request_id: int, current_user: User)
     item.status = ItemStatus.reserved
 
     # Auto-reject all other pending requests for this item
-    other_requests = await db.scalars(
+    other_requests_result = await db.execute(
         select(DonationRequest)
+        .options(selectinload(DonationRequest.requester))
         .where(
             DonationRequest.item_id == item.id,
             DonationRequest.id != req.id,
@@ -165,6 +177,11 @@ async def approve_request(db: AsyncSession, request_id: int, current_user: User)
         )
         .with_for_update()
     )
+    other_requests = other_requests_result.scalars().all()
+    rejected_users = [
+        (other.requester.email, other.requester.full_name)
+        for other in other_requests
+    ]
     for other in other_requests:
         other.status = RequestStatus.rejected
 
@@ -173,6 +190,25 @@ async def approve_request(db: AsyncSession, request_id: int, current_user: User)
     # Reload to get fresh, fully-joined object after commit expiry
     loaded = await _load_request(db, request_id)
     assert loaded is not None
+
+    # Dispatch approval notification to requester
+    from app.worker.tasks import send_approval_notification, send_rejection_notification
+    send_approval_notification.delay(
+        requester_email=loaded.requester.email,
+        requester_name=loaded.requester.full_name,
+        item_title=loaded.item.title,
+        donor_phone=current_user.phone or "not provided",
+        pickup_instructions="Contact the donor to arrange pickup.",
+    )
+
+    # Dispatch rejection notifications to competing requesters who were auto-rejected
+    for r_email, r_name in rejected_users:
+        send_rejection_notification.delay(
+            requester_email=r_email,
+            requester_name=r_name,
+            item_title=loaded.item.title,
+        )
+
     return loaded
 
 
@@ -198,6 +234,15 @@ async def reject_request(db: AsyncSession, request_id: int, current_user: User) 
 
     loaded = await _load_request(db, request_id)
     assert loaded is not None
+
+    # Dispatch rejection notification to requester
+    from app.worker.tasks import send_rejection_notification
+    send_rejection_notification.delay(
+        requester_email=loaded.requester.email,
+        requester_name=loaded.requester.full_name,
+        item_title=loaded.item.title,
+    )
+
     return loaded
 
 
@@ -232,6 +277,17 @@ async def pickup_request(db: AsyncSession, request_id: int, current_user: User) 
 
     loaded = await _load_request(db, request_id)
     assert loaded is not None
+
+    # Dispatch pickup confirmation email to both donor and recipient
+    from app.worker.tasks import send_pickup_confirmation
+    send_pickup_confirmation.delay(
+        donor_email=loaded.item.donor.email,
+        donor_name=loaded.item.donor.full_name,
+        requester_email=loaded.requester.email,
+        requester_name=loaded.requester.full_name,
+        item_title=loaded.item.title,
+    )
+
     return loaded
 
 
