@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.item import Item, ItemCategory, ItemCondition, ItemStatus
+from app.models.request import DonationRequest, RequestStatus
 from app.models.user import User
 from app.schemas.item import ItemCreate, ItemOut, ItemUpdate
 from app.schemas.pagination import PaginatedResponse
@@ -190,6 +191,25 @@ async def update_item(db: AsyncSession, item_id: int, owner: User, item_update: 
 async def remove_item(db: AsyncSession, item_id: int, owner: User) -> Item:
     item = await get_item(db, item_id)
     ensure_item_owner(item, owner)
+
+    if item.status in (ItemStatus.donated, ItemStatus.removed):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Item is already {item.status.value} and cannot be removed",
+        )
+
+    # Cancel all pending requests; reject any approved request (item will be gone)
+    active_requests = await db.scalars(
+        select(DonationRequest)
+        .where(
+            DonationRequest.item_id == item_id,
+            DonationRequest.status.in_([RequestStatus.pending, RequestStatus.approved]),
+        )
+        .with_for_update()
+    )
+    for req in active_requests:
+        req.status = RequestStatus.cancelled if req.status == RequestStatus.pending else RequestStatus.rejected
+
     item.status = ItemStatus.removed
     item.removed_at = func.now()
     await db.commit()
