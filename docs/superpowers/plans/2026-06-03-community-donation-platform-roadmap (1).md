@@ -400,106 +400,120 @@ Implement location-aware matching and admin analytics using durable timestamps a
 
 ---
 
-## Phase 8
+## Phase 8: Google Authentication
 
 ### Goal
-Build the Streamlit frontend against stable API contracts with role-based navigation, shared styling, shared components, and privacy-safe UI behavior.
-
-### Files to create
-- `frontend/app.py`
-- `frontend/api_client.py`
-- `frontend/styles.css`
-- `frontend/chart_theme.py`
-- `frontend/components/__init__.py`
-- `frontend/components/item_card.py`
-- `frontend/components/request_card.py`
-- `frontend/components/status_badge.py`
-- `frontend/pages/1_Login.py`
-- `frontend/pages/2_Register.py`
-- `frontend/pages/3_Browse_Items.py`
-- `frontend/pages/4_My_Listings.py`
-- `frontend/pages/5_My_Requests.py`
-- `frontend/pages/6_NGO_Dashboard.py`
-- `frontend/pages/7_Analytics.py`
-- `frontend/tests/test_api_client.py`
+Implement Google OAuth authentication on the FastAPI backend using Supabase Auth/GoTrue integration. Maintain a clean, secure, role-based JWT verification flow.
 
 ### Files to modify
-- `frontend/requirements.txt`
-- `frontend/.streamlit/config.toml`
+- `backend/app/config.py` (Add Supabase Google OAuth environment variables)
+- `backend/app/routers/auth.py` (Add endpoints for OAuth callback and login urls)
+- `backend/app/dependencies.py` (Update current user JWT verification to validate Google-auth users if needed)
+- `backend/tests/test_auth.py` (Unit/integration tests for authentication flow)
 
 ### Dependencies
-- Phase 7 backend APIs complete and tested.
+- Phase 7 backend APIs complete and tested (verified baseline at `v0.7-stable`).
 
 ### Acceptance criteria
-- Login stores `token`, `user_id`, `role`, `full_name`, and `email` in session state.
-- Register auto-logins and redirects.
-- Unauthenticated users can only access login/register.
-- Donor-only, recipient-only, NGO-only, and admin-only pages enforce role redirects.
-- Browse page supports API filters and request dialog.
-- My Listings supports create, view incoming requests, approve, reject, pickup, and remove.
-- My Requests supports viewing and cancelling pending requests.
-- NGO dashboard supports NGO note and NGO request summary.
-- Analytics page renders summary metrics and four charts.
-- Shared components render UI and accept callbacks; page files own API mutations.
-- Donor phone is not shown before approval.
-- UI handles `401`, `403`, `404`, `409`, and `422` responses clearly.
-- Global CSS and chart theme follow GiveCircle brand constraints.
+- Secure Google OAuth registration and login flow.
+- Correctly map Google-authenticated users to roles (Donor/Recipient/NGO) in the database.
+- Issue and validate standard JWT access tokens.
+- Securely store OAuth credentials using environment variables.
 
 ### Tests required
-- API client unit tests for headers and error propagation.
-- Manual Streamlit smoke tests for each role.
-- Visual inspection of brand rules.
-- Frontend behavior tests where practical for session state and role guards.
+- Unit and integration tests for Google OAuth routes and token parsing.
+- Mocking external GoTrue/Supabase calls in test suites.
 
 ### Risks
-- Streamlit rerun behavior can duplicate API actions if forms/buttons are not keyed carefully.
-- Shared components can become too coupled if they perform API calls directly.
-- Streamlit is acceptable for MVP but limited for high-scale production UX.
+- OAuth redirects and callback configuration mismatches in local development.
+- Ensuring role assignment is prompt and secure during first-time OAuth login.
 
 ---
 
-## Phase 9
+## Phase 9: AI Generator Feature
 
 ### Goal
-Add end-to-end tests, full-system verification, coverage reporting, and final production-readiness documentation.
+Add an AI-powered listing description/tags generator using the Google Gemini API (or a mock service fallback if API keys are unavailable).
 
 ### Files to create
-- `e2e_tests/conftest.py`
+- `backend/app/services/ai_generator.py` (Service module for Gemini API communication)
+- `backend/app/routers/ai_generator.py` (Router for generating description and tags)
+
+### Files to modify
+- `backend/app/main.py` (Register the new router)
+
+### Dependencies
+- Stable database schemas and items endpoints.
+
+### Acceptance criteria
+- Endpoint `POST /api/items/generate` returns structured descriptions and tags based on item title and category.
+- Graceful error handling and fallback when API limits are hit or credentials are not configured.
+- Prompt templates tuned to generate friendly, concise listing copy and appropriate tags.
+
+### Tests required
+- Backend unit tests for AI generation endpoints using mock Gemini API clients.
+
+### Risks
+- API rate limits, costs, and token consumption.
+- Handling unverified/inappropriate input titles gracefully.
+
+---
+
+## Phase 10: Next.js Frontend
+
+### Goal
+Build a premium, next-generation Next.js web application utilizing TailwindCSS and TypeScript, replacing the deprecated Streamlit UI. Follow GiveCircle brand identity guidelines strictly.
+
+### Files to create
+- `frontend/` (Initialize new Next.js project skeleton)
+- Pages: Dashboard, Login, Register, Browse Listings, My Listings, My Requests, NGO Dashboard, Admin Analytics.
+
+### Dependencies
+- Phase 8 (Google Auth) and Phase 9 (AI Generator) backend components complete.
+
+### Acceptance criteria
+- Modern responsive layout utilizing Emerald and Slate color palettes.
+- Absolutely NO purple/indigo or pure white backgrounds.
+- Client-side routing and protected routes based on user role.
+- Support Google OAuth login flow and integration with AI generator endpoint.
+- Clear error feedback for API errors (400, 401, 403, 404, 409, 422).
+
+### Tests required
+- Next.js component unit tests.
+- Manual verification of branding and role-based redirects.
+
+---
+
+## Phase 11: Smoke Testing
+
+### Goal
+Merge and integrate Phase 8, 9, and 10 to validate full end-to-end functionality.
+
+### Acceptance criteria
+- Docker Compose cleanly spins up the API, Next.js frontend, Redis, and Celery worker.
+- Users can log in via email/password or Google OAuth, list items with AI description generator, request items, and complete matching flows.
+
+---
+
+## Phase 12: Full E2E Playwright Testing
+
+### Goal
+Develop a comprehensive Playwright end-to-end testing suite validating the Next.js frontend against the FastAPI backend.
+
+### Files to create
+- `e2e_tests/conftest.py` (E2E configurations, seed data cleanup with retries)
 - `e2e_tests/test_donor_flow.py`
 - `e2e_tests/test_recipient_flow.py`
 - `e2e_tests/test_ngo_flow.py`
 - `e2e_tests/test_admin_analytics.py`
 - `e2e_tests/test_edge_cases.py`
-- `README.md`
-- `docs/production-gaps.md`
-- `docs/api-contracts.md`
-
-### Files to modify
-- `docker-compose.yml`
-- `.env.example`
-- `backend/tests/conftest.py`
 
 ### Dependencies
-- Phase 8 frontend complete.
-- Live API, Supabase DB, Redis, worker, and Streamlit services available.
+- Staging-like environment running Next.js frontend and FastAPI backend.
 
 ### Acceptance criteria
-- E2E donor flow covers registration/login, item creation, incoming request approval, pickup.
-- E2E recipient flow covers browse, request creation, request status tracking, cancellation.
-- E2E NGO flow covers NGO note and NGO dashboard visibility.
-- E2E admin flow covers analytics visibility and non-admin denial.
-- Edge-case E2E covers duplicate request, self-request block, stale approval conflict, and item removal behavior.
-- Backend test coverage is at least 80%.
-- README documents setup, migrations, tests, and run commands.
-- Production gaps document names deferred items: rate limiting, refresh/revocation, admin moderation, uploads, in-app notifications, materialized analytics, and production deployment hardening.
-- API contracts document response shapes and error codes.
-
-### Tests required
-- `pytest backend/tests/ -v --cov=app --cov-report=term-missing`
-- `pytest e2e_tests/ -v`
-- Manual smoke test from donor listing through recipient/NGO request, approval, pickup, and analytics update.
-
-### Risks
-- E2E tests can be flaky unless they use selectors and explicit waits.
-- Test data cleanup must not rely on non-existent user delete APIs.
-- Live Celery/email behavior must be mocked or carefully isolated in test environments.
+- E2E donor flow covers listing, request approval, and pickup.
+- E2E recipient flow covers browse, request, and cancellation.
+- NGO flow covers dashboard and NGO notes.
+- Admin flow covers analytics dashboard access guards.
+- Edge cases test self-request block, duplicate requests, and soft deletes.
