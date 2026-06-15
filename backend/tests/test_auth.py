@@ -27,6 +27,9 @@ class FakeSupabaseAuthClient:
         self.access_token: str | None = None
         self.sign_up_payloads: list[UserCreate] = []
         self.sign_in_payloads: list[tuple[str, str]] = []
+        self.exchange_code_payloads: list[tuple[str, str]] = []
+        self.exchange_code_response: dict[str, object] | None = None
+        self.reject_exchange = False
 
     async def sign_up(self, user: UserCreate) -> dict[str, object]:
         self.sign_up_payloads.append(user)
@@ -39,6 +42,14 @@ class FakeSupabaseAuthClient:
         if self.access_token is None:
             raise HTTPException(status_code=401, detail="Invalid auth response")
         return {"access_token": self.access_token}
+
+    async def exchange_code(self, code: str, code_verifier: str) -> dict[str, object]:
+        self.exchange_code_payloads.append((code, code_verifier))
+        if self.reject_exchange:
+            raise HTTPException(status_code=400, detail="Google code exchange failed")
+        if self.exchange_code_response is None:
+            raise HTTPException(status_code=400, detail="Google code exchange failed")
+        return self.exchange_code_response
 
 
 async def create_test_user(email: str, role: UserRole = UserRole.recipient, active: bool = True) -> User:
@@ -273,5 +284,227 @@ async def test_require_role_allows_matching_role_and_rejects_mismatch():
         with pytest.raises(HTTPException) as exc_info:
             await admin_guard(user)
         assert exc_info.value.status_code == 403
+    finally:
+        await delete_test_users(email)
+
+
+@pytest.mark.asyncio
+async def test_login_google_redirects_and_sets_cookie():
+    async with auth_test_client() as client:
+        response = await client.get("/api/auth/login/google", follow_redirects=False)
+
+    assert response.status_code == 307 or response.status_code == 302
+    redirect_url = response.headers["location"]
+    assert "provider=google" in redirect_url
+    assert "code_challenge=" in redirect_url
+    assert "code_challenge_method=S256" in redirect_url
+
+    # Check that sb-code-verifier cookie is set
+    assert "sb-code-verifier" in response.cookies
+    cookie = response.cookies.get("sb-code-verifier")
+    assert cookie is not None
+    assert len(cookie) > 0
+    # TF-01 / GAP-2: verify the cookie is marked httponly in the raw Set-Cookie header
+    set_cookie_header = response.headers.get("set-cookie", "")
+    assert "httponly" in set_cookie_header.lower(), "sb-code-verifier cookie must be httponly"
+
+
+@pytest.mark.asyncio
+async def test_callback_google_success_registers_new_user(monkeypatch):
+    fake_client = FakeSupabaseAuthClient()
+    monkeypatch.setattr(auth_service, "create_supabase_auth_client", lambda: fake_client)
+
+    email = f"google-new-{uuid4().hex}@example.com"
+    supabase_id = str(uuid4())
+    fake_client.exchange_code_response = {
+        "user": {
+            "id": supabase_id,
+            "email": email,
+            "user_metadata": {
+                "full_name": "Google New User"
+            }
+        }
+    }
+
+    try:
+        async with auth_test_client() as client:
+            client.cookies.set("sb-code-verifier", "dummy_verifier")  # TF-06: set on client, not per-request
+            response = await client.get(
+                "/api/auth/callback/google?code=dummy_code",
+                follow_redirects=False,
+            )
+
+        assert response.status_code == 307 or response.status_code == 302
+        redirect_url = response.headers["location"]
+        assert "#access_token=" in redirect_url  # GAP-1: token must be in fragment, not query param
+        assert "is_new_user=true" in redirect_url
+        assert fake_client.exchange_code_payloads == [("dummy_code", "dummy_verifier")]
+
+        # Verify user created in DB with default recipient role
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == email))
+            user = result.scalar_one()
+            assert user.supabase_user_id == supabase_id
+            assert user.role == UserRole.recipient
+            assert user.full_name == "Google New User"
+            assert user.hashed_password == auth_service.SUPABASE_PASSWORD_SENTINEL
+    finally:
+        await delete_test_users(email)
+
+
+@pytest.mark.asyncio
+async def test_callback_google_success_existing_user(monkeypatch):
+    email = f"google-existing-{uuid4().hex}@example.com"
+    user = await create_test_user(email, role=UserRole.donor)
+    
+    fake_client = FakeSupabaseAuthClient()
+    monkeypatch.setattr(auth_service, "create_supabase_auth_client", lambda: fake_client)
+    fake_client.exchange_code_response = {
+        "user": {
+            "id": user.supabase_user_id,
+            "email": email,
+            "user_metadata": {
+                "full_name": user.full_name
+            }
+        }
+    }
+
+    try:
+        async with auth_test_client() as client:
+            client.cookies.set("sb-code-verifier", "dummy_verifier")  # TF-06: set on client, not per-request
+            response = await client.get(
+                "/api/auth/callback/google?code=dummy_code",
+                follow_redirects=False,
+            )
+
+        assert response.status_code == 307 or response.status_code == 302
+        redirect_url = response.headers["location"]
+        assert "#access_token=" in redirect_url  # GAP-1: token must be in fragment, not query param
+        assert "is_new_user=false" in redirect_url
+        # TF-02: decode the issued token and verify all required JWT claims are present
+        fragment = redirect_url.split("#", 1)[1]
+        params = dict(p.split("=", 1) for p in fragment.split("&"))
+        token = params["access_token"]
+        settings = get_settings()
+        payload = jwt.decode(token, settings.supabase_jwt_secret, algorithms=[settings.jwt_algorithm])
+        assert payload["sub"] == user.supabase_user_id
+        assert payload["role"] == UserRole.donor.value
+        assert "user_id" in payload
+        assert "exp" in payload
+
+        # Verify user still exists with their original role
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == email))
+            updated_user = result.scalar_one()
+            assert updated_user.role == UserRole.donor
+    finally:
+        await delete_test_users(email)
+
+
+@pytest.mark.asyncio
+async def test_callback_google_missing_verifier_returns_400():
+    async with auth_test_client() as client:
+        response = await client.get("/api/auth/callback/google?code=dummy_code")
+    assert response.status_code == 400
+    assert "Missing code verifier" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_callback_google_failed_exchange_returns_400(monkeypatch):
+    # TF-05: After GAP-3 fix, HTTPException from the service propagates with its original
+    # status code and detail — no longer wrapped with 'Google authentication failed'.
+    fake_client = FakeSupabaseAuthClient()
+    fake_client.reject_exchange = True
+    monkeypatch.setattr(auth_service, "create_supabase_auth_client", lambda: fake_client)
+
+    async with auth_test_client() as client:
+        client.cookies.set("sb-code-verifier", "dummy_verifier")  # TF-06: set on client
+        response = await client.get(
+            "/api/auth/callback/google?code=dummy_code",
+        )
+    assert response.status_code == 400
+    assert "Google code exchange failed" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_callback_google_inactive_user_returns_401(monkeypatch):
+    """TF-03 / GAP-6: Inactive users must be rejected with 401 even via Google OAuth.
+    After GAP-3 fix the 401 HTTPException from auth_service propagates directly."""
+    email = f"google-inactive-{uuid4().hex}@example.com"
+    user = await create_test_user(email, role=UserRole.recipient, active=False)
+
+    fake_client = FakeSupabaseAuthClient()
+    monkeypatch.setattr(auth_service, "create_supabase_auth_client", lambda: fake_client)
+    fake_client.exchange_code_response = {
+        "user": {
+            "id": user.supabase_user_id,
+            "email": email,
+            "user_metadata": {"full_name": user.full_name},
+        }
+    }
+
+    try:
+        async with auth_test_client() as client:
+            client.cookies.set("sb-code-verifier", "dummy_verifier")
+            response = await client.get(
+                "/api/auth/callback/google?code=dummy_code",
+            )
+
+        assert response.status_code == 401
+        assert "Inactive user" in response.json()["detail"]
+    finally:
+        await delete_test_users(email)
+
+
+@pytest.mark.asyncio
+async def test_callback_google_links_existing_email_only_user(monkeypatch):
+    """TF-04: An email-password user (supabase_user_id=None) who later signs in
+    via Google must have their Supabase ID linked to the existing account record,
+    preserving their original role and returning is_new_user=false."""
+    email = f"google-link-{uuid4().hex}@example.com"
+
+    async with async_session_factory() as session:
+        link_user = User(
+            supabase_user_id=None,  # email-password user with no Supabase ID yet
+            email=email,
+            hashed_password=auth_service.SUPABASE_PASSWORD_SENTINEL,
+            full_name="Link User",
+            role=UserRole.donor,
+            preferred_categories=[],
+        )
+        session.add(link_user)
+        await session.commit()
+        await session.refresh(link_user)
+
+    new_supabase_id = str(uuid4())
+    fake_client = FakeSupabaseAuthClient()
+    monkeypatch.setattr(auth_service, "create_supabase_auth_client", lambda: fake_client)
+    fake_client.exchange_code_response = {
+        "user": {
+            "id": new_supabase_id,
+            "email": email,
+            "user_metadata": {"full_name": "Link User"},
+        }
+    }
+
+    try:
+        async with auth_test_client() as client:
+            client.cookies.set("sb-code-verifier", "dummy_verifier")
+            response = await client.get(
+                "/api/auth/callback/google?code=dummy_code",
+                follow_redirects=False,
+            )
+
+        assert response.status_code in (302, 307)
+        redirect_url = response.headers["location"]
+        assert "#access_token=" in redirect_url
+        assert "is_new_user=false" in redirect_url
+
+        # Verify supabase_user_id was written back to the existing user record
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == email))
+            updated_user = result.scalar_one()
+            assert updated_user.supabase_user_id == new_supabase_id
+            assert updated_user.role == UserRole.donor  # original role preserved
     finally:
         await delete_test_users(email)

@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     public_app_url: AnyUrl = "http://localhost:8501"
     api_public_url: AnyUrl = "http://localhost:8000"
     cors_allowed_origins: str = "http://localhost:8501"
+    # GAP-8: These default to localhost — production MUST override via GOOGLE_REDIRECT_URI
+    # and FRONTEND_OAUTH_REDIRECT_URL env vars (see .env.example). Silent localhost defaults
+    # will mis-route OAuth callbacks in any non-local environment.
+    google_redirect_uri: AnyUrl = "http://localhost:8000/api/auth/callback/google"
+    frontend_oauth_redirect_url: AnyUrl = "http://localhost:3000/auth/callback"
 
     environment: str = "local"
     log_level: str = "INFO"
