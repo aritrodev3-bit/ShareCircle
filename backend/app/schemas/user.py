@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
-    role: UserRole
+    role: UserRole | None = None
     phone: str | None = Field(default=None, max_length=20)
 
 
@@ -16,7 +16,7 @@ class UserOut(BaseModel):
     id: int
     email: EmailStr
     full_name: str
-    role: UserRole
+    role: UserRole | None
     phone: str | None
     preferred_categories: list[str]
     is_active: bool
@@ -26,3 +26,10 @@ class UserOut(BaseModel):
 
 class PreferencesUpdate(BaseModel):
     preferred_categories: list[ItemCategory]
+
+
+class UserUpdate(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    role: UserRole | None = None
+    phone: str | None = Field(default=None, max_length=20)
+

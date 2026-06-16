@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.auth import Token
-from app.schemas.user import PreferencesUpdate, UserCreate, UserOut
+from app.schemas.user import PreferencesUpdate, UserCreate, UserOut, UserUpdate
 from app.services import auth_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -39,3 +39,21 @@ async def update_my_preferences(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     return await auth_service.update_preferences(db, current_user, preferences.preferred_categories)
+
+
+@router.patch("/me", response_model=UserOut)
+async def update_profile(
+    user_update: UserUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User:
+    if user_update.full_name is not None:
+        current_user.full_name = user_update.full_name
+    if user_update.role is not None:
+        current_user.role = user_update.role
+    if user_update.phone is not None:
+        current_user.phone = user_update.phone
+
+    await db.commit()
+    await db.refresh(current_user)
+    return current_user

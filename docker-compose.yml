@@ -42,14 +42,18 @@ services:
         condition: service_healthy
 
   frontend:
-    image: python:3.11-slim
-    working_dir: /app
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+    env_file:
+      - .env
     environment:
-      API_BASE_URL: http://api:8000
-    command: sh -c "pip install --no-cache-dir -r requirements.txt && streamlit run app.py --server.address=0.0.0.0 --server.port=8501"
+      NODE_ENV: production
+      API_URL: http://api:8000
     ports:
-      - "8501:8501"
-    volumes:
-      - ./frontend:/app
+      - "3000:3000"
     depends_on:
       - api

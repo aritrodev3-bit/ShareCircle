@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     api_base_url: AnyUrl = "http://localhost:8000"
     public_app_url: AnyUrl = "http://localhost:8501"
     api_public_url: AnyUrl = "http://localhost:8000"
-    cors_allowed_origins: str = "http://localhost:8501"
+    cors_allowed_origins: str = "http://localhost:8501,http://localhost:3000"
 
     environment: str = "local"
     log_level: str = "INFO"

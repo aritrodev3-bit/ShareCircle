@@ -42,6 +42,7 @@ async def create_item(
     condition: ItemCondition = ItemCondition.good,
     status: ItemStatus = ItemStatus.available,
     point: str | None = "POINT(77.5946 12.9716)",
+    city: str = "Bengaluru",
 ) -> Item:
     async with async_session_factory() as session:
         item = Item(
@@ -53,7 +54,7 @@ async def create_item(
             quantity=1,
             status=status,
             location=WKTElement(point, srid=4326) if point is not None else None,
-            city="Bengaluru",
+            city=city,
             pincode="560001",
         )
         session.add(item)
@@ -146,10 +147,11 @@ async def test_create_item_as_recipient_returns_403():
 async def test_list_items_filters_default_available_category_city_condition_and_pagination():
     email = f"donor-list-{uuid4().hex}@example.com"
     donor = await create_user(email, UserRole.donor)
-    first = await create_item(donor, "Books one", ItemCategory.books, ItemCondition.good)
-    second = await create_item(donor, "Books two", ItemCategory.books, ItemCondition.good)
-    await create_item(donor, "Toy one", ItemCategory.toys, ItemCondition.good)
-    await create_item(donor, "Reserved books", ItemCategory.books, ItemCondition.good, ItemStatus.reserved)
+    unique_city = f"TestCity-{uuid4().hex}"
+    first = await create_item(donor, "Books one", ItemCategory.books, ItemCondition.good, city=unique_city)
+    second = await create_item(donor, "Books two", ItemCategory.books, ItemCondition.good, city=unique_city)
+    await create_item(donor, "Toy one", ItemCategory.toys, ItemCondition.good, city=unique_city)
+    await create_item(donor, "Reserved books", ItemCategory.books, ItemCondition.good, ItemStatus.reserved, city=unique_city)
 
     try:
         async with item_test_client() as client:
@@ -157,7 +159,7 @@ async def test_list_items_filters_default_available_category_city_condition_and_
                 "/api/items/",
                 params=[
                     ("category", "books"),
-                    ("city", "Bengaluru"),
+                    ("city", unique_city),
                     ("condition", "good"),
                     ("page", "2"),
                     ("page_size", "1"),
@@ -179,7 +181,7 @@ async def test_list_items_filters_default_available_category_city_condition_and_
 async def test_list_items_radius_returns_near_items_and_excludes_null_location():
     email = f"donor-radius-{uuid4().hex}@example.com"
     donor = await create_user(email, UserRole.donor)
-    near = await create_item(donor, "Near item", point="POINT(77.5946 12.9716)")
+    near = await create_item(donor, "Near item", point="POINT(-74.0060 40.7128)")
     await create_item(donor, "Far item", point="POINT(72.8777 19.0760)")
     await create_item(donor, "Unknown location", point=None)
 
@@ -187,7 +189,7 @@ async def test_list_items_radius_returns_near_items_and_excludes_null_location()
         async with item_test_client() as client:
             response = await client.get(
                 "/api/items/",
-                params={"lat": "12.9716", "lng": "77.5946", "radius_km": "5"},
+                params={"lat": "40.7128", "lng": "-74.0060", "radius_km": "5"},
             )
 
         assert response.status_code == 200
