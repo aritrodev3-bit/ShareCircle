@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0A0B07;
+  --foreground: #E8EDE0;
+
+  --bg-primary: #0A0B07;
+  --bg-secondary: #111309;
+  --bg-tertiary: #181A0E;
+  --surface-1: #1F2211;
+  --surface-2: #272B14;
+  --surface-hover: #2F3419;
+
+  --lime-400: #BADE52;
+  --lime-500: #A7D129;
+  --lime-600: #85A820;
+  --lime-700: #6B8A1A;
+
+  --olive-500: #616F39;
+  --olive-600: #4E5530;
+  --olive-700: #3E4326;
+
+  --text-primary: #E8EDE0;
+  --text-secondary: #9AA582;
+  --text-muted: #616B4E;
+
+  --success: #A7D129;
+  --warning: #D4A017;
+  --error: #E05C5C;
+  --info: #7BAFD4;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-hover: var(--surface-hover);
+
+  --color-lime-400: var(--lime-400);
+  --color-lime-500: var(--lime-500);
+  --color-lime-600: var(--lime-600);
+  --color-lime-700: var(--lime-700);
+
+  --color-olive-500: var(--olive-500);
+  --color-olive-600: var(--olive-600);
+  --color-olive-700: var(--olive-700);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-error: var(--error);
+  --color-info: var(--info);
+
+  --font-serif: Georgia, Cambria, "Times New Roman", Times, serif;
+  --font-sans: var(--font-geist-sans), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+/* Base Headings - Serif and max 500 weight per brand rules */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+h1 {
+  font-size: 1.5rem; /* 24px */
+  line-height: 1.3;
+}
+h2 {
+  font-size: 1.25rem; /* 20px */
+  line-height: 1.4;
+}
+h3 {
+  font-size: 1.0625rem; /* 17px */
+  line-height: 1.5;
+}
+
+p, span, li, a, label, input, select, textarea {
+  font-family: var(--font-sans);
+  font-weight: 400;
+}
+
+/* Remove default focus styles and implement custom focus-ring */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  border-color: var(--lime-600) !important;
+  box-shadow: 0 0 0 3px rgba(167, 209, 41, 0.15) !important;
+  outline: none;
+}
+
+/* Ensure no elements violate the max font-weight 500 rule */
+* {
+  font-weight: inherit;
+}
+body, p, span, li, a {
+  font-weight: 400;
+}
+h1, h2, h3, h4, h5, h6, strong, b, button, input[type="submit"] {
+  font-weight: 500;
+}
+
+/* Form elements styling */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="number"],
+select,
+textarea {
+  background-color: var(--bg-secondary);
+  border: 1px solid rgba(167, 209, 41, 0.16);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 10px 14px;
+  font-size: 14px;
+  width: 100%;
+  transition: all 150ms ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--lime-600) !important;
+  box-shadow: 0 0 0 3px rgba(167, 209, 41, 0.15) !important;
+  outline: none;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Custom scrollbar matching GiveCircle theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--surface-2);
+}

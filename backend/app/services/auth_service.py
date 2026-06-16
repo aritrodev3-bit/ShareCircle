@@ -171,7 +171,7 @@ async def authenticate_user(
     token_user_id = read_int_claim(payload, "user_id")
     if token_user_id is not None and token_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if "role" in payload and payload["role"] != user.role.value:
+    if "role" in payload and user.role is not None and payload["role"] != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return access_token
 
@@ -223,7 +223,7 @@ async def get_user_from_token(db: AsyncSession, token: str) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if token_user_id is not None and token_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if "role" in payload and payload["role"] != user.role.value:
+    if "role" in payload and user.role is not None and payload["role"] != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")

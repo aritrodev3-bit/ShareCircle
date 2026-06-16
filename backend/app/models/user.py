@@ -28,7 +28,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole, name="user_role"), nullable=False)
+    role: Mapped[UserRole | None] = mapped_column(Enum(UserRole, name="user_role"), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20))
     preferred_categories: Mapped[list[str]] = mapped_column(
         ARRAY(String),

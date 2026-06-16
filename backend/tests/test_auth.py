@@ -68,7 +68,7 @@ def make_token(user: User, expires_delta: timedelta = timedelta(minutes=30)) -> 
     settings = get_settings()
     payload = {
         "sub": user.supabase_user_id or user.email,
-        "role": user.role.value,
+        "role": user.role.value if user.role is not None else "authenticated",
         "user_id": user.id,
         "exp": datetime.now(timezone.utc) + expires_delta,
     }
@@ -275,3 +275,47 @@ async def test_require_role_allows_matching_role_and_rejects_mismatch():
         assert exc_info.value.status_code == 403
     finally:
         await delete_test_users(email)
+
+
+@pytest.mark.asyncio
+async def test_update_profile_updates_role():
+    email = f"profile-update-{uuid4().hex}@example.com"
+    async with async_session_factory() as session:
+        user = User(
+            supabase_user_id=str(uuid4()),
+            email=email,
+            hashed_password=auth_service.SUPABASE_PASSWORD_SENTINEL,
+            full_name="No Role User",
+            role=None,
+            preferred_categories=[],
+            is_active=True,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+
+    token = make_token(user)
+
+    try:
+        async with auth_test_client() as client:
+            response = await client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+            assert response.status_code == 200
+            assert response.json()["role"] is None
+
+            response = await client.patch(
+                "/api/auth/me",
+                json={"role": "ngo", "full_name": "Updated Name"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert response.status_code == 200
+            assert response.json()["role"] == "ngo"
+            assert response.json()["full_name"] == "Updated Name"
+
+        async with async_session_factory() as session:
+            result = await session.execute(select(User).where(User.email == email))
+            persisted_user = result.scalar_one()
+            assert persisted_user.role == UserRole.ngo
+            assert persisted_user.full_name == "Updated Name"
+    finally:
+        await delete_test_users(email)
+
