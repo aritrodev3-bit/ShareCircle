@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +15,18 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(user_create: UserCreate, db: Annotated[AsyncSession, Depends(get_db)]) -> User:
-    return await auth_service.create_user(db, user_create)
+    try:
+        return await auth_service.create_user(db, user_create)
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        import logging
+        logger = logging.getLogger("app.routers.auth")
+        logger.exception("Unexpected error during user registration")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration failed. Please check your credentials or try again later.",
+        )
 
 
 @router.post("/login", response_model=Token)

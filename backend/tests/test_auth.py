@@ -319,3 +319,27 @@ async def test_update_profile_updates_role():
     finally:
         await delete_test_users(email)
 
+
+@pytest.mark.asyncio
+async def test_register_unexpected_exception_returns_400(monkeypatch):
+    email = f"unexpected-err-{uuid4().hex}@example.com"
+
+    async def fake_create_user(db, user_create):
+        raise ValueError("Unexpected database error or connection issue")
+
+    monkeypatch.setattr(auth_service, "create_user", fake_create_user)
+
+    async with auth_test_client() as client:
+        response = await client.post(
+            "/api/auth/register",
+            json={
+                "email": email,
+                "password": "secure-password",
+                "full_name": "Failure User",
+                "role": "donor",
+            },
+        )
+    assert response.status_code == 400
+    assert "Registration failed" in response.json()["detail"]
+
+
