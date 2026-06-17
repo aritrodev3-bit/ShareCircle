@@ -38,6 +38,8 @@ export default function DonorDashboard() {
   const [submittingItem, setSubmittingItem] = useState(false);
   const [addItemError, setAddItemError] = useState<string | null>(null);
   const [addItemSuccess, setAddItemSuccess] = useState(false);
+  const [generatingAi, setGeneratingAi] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // Alert message for request actions
   const [actionAlert, setActionAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -202,6 +204,44 @@ export default function DonorDashboard() {
     }
   };
 
+  // AI Description Generator Action
+  const handleAiDescribe = async () => {
+    if (!title.trim()) {
+      setAiError('Please enter a title first.');
+      return;
+    }
+    setGeneratingAi(true);
+    setAiError(null);
+    try {
+      const response = await fetch('/api/ai/describe-item', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title: title.trim() }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          setAiError('Daily AI limit reached. You can still fill in the details manually.');
+        } else {
+          setAiError('AI generation failed. Please fill in the details manually.');
+        }
+        return;
+      }
+
+      const data = await response.json();
+      setDescription(data.description);
+      setCategory(data.category);
+      setCondition(data.condition);
+    } catch (err) {
+      console.error(err);
+      setAiError('AI generation failed. Please fill in the details manually.');
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
+
   // Soft Delete Listing Action
   const handleRemoveListing = async (itemId: number) => {
     if (!confirm('Are you sure you want to remove this listing?')) return;
@@ -289,6 +329,14 @@ export default function DonorDashboard() {
       return () => clearTimeout(timer);
     }
   }, [actionAlert]);
+
+  // Reset AI states when modal is closed
+  useEffect(() => {
+    if (!isModalOpen) {
+      setGeneratingAi(false);
+      setAiError(null);
+    }
+  }, [isModalOpen]);
 
   return (
     <div className="space-y-6">
@@ -464,9 +512,28 @@ export default function DonorDashboard() {
 
                 {/* Title */}
                 <div>
-                  <label htmlFor="itemTitle" className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wider">
-                    Item Title
-                  </label>
+                  <div className="flex justify-between items-center mb-1.5">
+                    <label htmlFor="itemTitle" className="block text-xs font-medium text-text-secondary uppercase tracking-wider">
+                      Item Title
+                    </label>
+                    {title.trim().length > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleAiDescribe}
+                        disabled={generatingAi || submittingItem}
+                        className="inline-flex items-center space-x-1 text-xs text-lime-400 hover:opacity-80 bg-transparent border-none p-0 cursor-pointer disabled:opacity-50"
+                      >
+                        {generatingAi ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin text-lime-400" />
+                            <span>Generating...</span>
+                          </>
+                        ) : (
+                          <span>✨ AI Describe</span>
+                        )}
+                      </button>
+                    )}
+                  </div>
                   <input
                     id="itemTitle"
                     type="text"
@@ -475,8 +542,14 @@ export default function DonorDashboard() {
                     className="focus-ring"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    disabled={submittingItem}
+                    disabled={submittingItem || generatingAi}
                   />
+                  {aiError && (
+                    <div className="mt-1.5 bg-error/5 border border-error/20 text-error rounded-lg p-2 flex items-start space-x-2 text-xs">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>{aiError}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Description */}
