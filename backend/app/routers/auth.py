@@ -1,9 +1,14 @@
+import base64
+import hashlib
+import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.auth import Token
@@ -68,3 +73,66 @@ async def update_profile(
     await db.commit()
     await db.refresh(current_user)
     return current_user
+
+
+@router.get("/login/google")
+async def login_google() -> RedirectResponse:
+    settings = get_settings()
+    code_verifier = secrets.token_urlsafe(64)
+    hashed = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = (
+        base64.urlsafe_b64encode(hashed)
+        .decode("ascii")
+        .replace("=", "")
+    )
+
+    supabase_auth_url = (
+        f"{str(settings.supabase_url).rstrip('/')}/auth/v1/authorize"
+        f"?provider=google"
+        f"&redirect_to={settings.google_redirect_uri}"
+        f"&code_challenge={code_challenge}"
+        f"&code_challenge_method=S256"
+    )
+
+    redirect_response = RedirectResponse(url=supabase_auth_url)
+    redirect_response.set_cookie(
+        key="sb-code-verifier",
+        value=code_verifier,
+        httponly=True,
+        secure=settings.environment != "local",
+        samesite="lax",
+        max_age=600,
+    )
+    return redirect_response
+
+
+@router.get("/callback/google")
+async def callback_google(
+    code: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> RedirectResponse:
+    settings = get_settings()
+    code_verifier = request.cookies.get("sb-code-verifier")
+    if not code_verifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing code verifier",
+        )
+
+    try:
+        result = await auth_service.exchange_google_code(db, code, code_verifier)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Google authentication service error",
+        ) from exc
+
+    redirect_response = RedirectResponse(
+        url=f"{settings.frontend_oauth_redirect_url}#access_token={result['access_token']}&is_new_user={str(result['is_new_user']).lower()}"
+    )
+    redirect_response.delete_cookie("sb-code-verifier")
+    return redirect_response
+

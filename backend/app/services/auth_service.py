@@ -62,6 +62,24 @@ class SupabaseAuthClient:
             )
         return response.json()
 
+    async def exchange_code(self, code: str, code_verifier: str) -> dict[str, Any]:
+        payload = {
+            "auth_code": code,
+            "code_verifier": code_verifier,
+        }
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                f"{self.auth_url}/token?grant_type=pkce",
+                json=payload,
+                headers=self.headers,
+            )
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Google code exchange failed",
+            )
+        return response.json()
+
 
 def create_supabase_auth_client() -> SupabaseAuthClient:
     return SupabaseAuthClient()
@@ -171,9 +189,80 @@ async def authenticate_user(
     token_user_id = read_int_claim(payload, "user_id")
     if token_user_id is not None and token_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if "role" in payload and user.role is not None and payload["role"] != user.role.value:
+    if "role" in payload and payload["role"] != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return access_token
+
+
+async def exchange_google_code(
+    db: AsyncSession,
+    code: str,
+    code_verifier: str,
+    auth_client: SupabaseAuthClient | None = None,
+) -> dict[str, Any]:
+    client = auth_client or create_supabase_auth_client()
+    auth_response = await client.exchange_code(code, code_verifier)
+    
+    supabase_user_id = extract_supabase_user_id(auth_response)
+    user_payload = auth_response.get("user", {})
+    email = user_payload.get("email")
+    user_metadata = user_payload.get("user_metadata", {})
+    full_name = user_metadata.get("full_name") or user_metadata.get("name") or "Google User"
+    
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Supabase session did not include email",
+        )
+        
+    user = await get_user_by_supabase_user_id(db, supabase_user_id)
+    is_new_user = False
+    
+    if user is None:
+        user = await get_user_by_email(db, email)
+        if user is not None:
+            if user.supabase_user_id is None:
+                user.supabase_user_id = supabase_user_id
+                await db.commit()
+                await db.refresh(user)
+        else:
+            user = User(
+                supabase_user_id=supabase_user_id,
+                email=email,
+                hashed_password=SUPABASE_PASSWORD_SENTINEL,
+                full_name=full_name,
+                role=UserRole.recipient,
+                preferred_categories=[],
+            )
+            db.add(user)
+            try:
+                await db.commit()
+            except IntegrityError as exc:
+                await db.rollback()
+                user = await get_user_by_email(db, email)
+                if user is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Failed to register Google user",
+                    ) from exc
+            else:
+                await db.refresh(user)
+                is_new_user = True
+                
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Inactive user",
+        )
+        
+    app_access_token = create_access_token(user)
+    
+    return {
+        "access_token": app_access_token,
+        "token_type": "bearer",
+        "is_new_user": is_new_user,
+        "user": user,
+    }
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
@@ -223,7 +312,7 @@ async def get_user_from_token(db: AsyncSession, token: str) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if token_user_id is not None and token_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if "role" in payload and user.role is not None and payload["role"] != user.role.value:
+    if "role" in payload and payload["role"] != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")
