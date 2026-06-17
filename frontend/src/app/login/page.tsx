@@ -97,7 +97,7 @@ export default function LoginPage() {
                   type="email"
                   required
                   placeholder="name@example.com"
-                  className="pl-10 focus-ring"
+                  className="!pl-10 focus-ring"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
@@ -119,7 +119,7 @@ export default function LoginPage() {
                   type="password"
                   required
                   placeholder="••••••••"
-                  className="pl-10 focus-ring"
+                  className="!pl-10 focus-ring"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
