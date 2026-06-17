@@ -6,10 +6,11 @@ This file is repository-wide Codex guidance. Place narrower `AGENTS.md` files on
 
 Use these documents in this order:
 
-1. `docs/superpowers/plans/community_donation_platform_prd_v2.md` is the product source of truth.
-2. `docs/superpowers/plans/2026-06-03-community-donation-platform-roadmap (1).md` is the required implementation order.
-3. `docs/superpowers/plans/2026-06-03-community-donation-platform-implementation-plan.md` is the architecture and execution reference.
-4. `docs/superpowers/plans/2026-06-03-third-party-setup-runbook-supabase.md` is the environment and third-party setup reference.
+1. `docs/superpowers/plans/phase_9_findings.md` is the absolute source of truth for Phase 9 AI Feature architecture, schemas, and flow.
+2. `docs/superpowers/plans/community_donation_platform_prd_v2.md` is the product source of truth.
+3. `docs/superpowers/plans/2026-06-03-community-donation-platform-roadmap (1).md` is the required implementation order.
+4. `docs/superpowers/plans/2026-06-03-community-donation-platform-implementation-plan.md` is the architecture and execution reference.
+5. `docs/superpowers/plans/2026-06-03-third-party-setup-runbook-supabase.md` is the environment and third-party setup reference.
 
 Do not duplicate or reinterpret product requirements in code comments, docs, or prompts. When requirements conflict, follow the PRD for product behavior, the roadmap for sequencing, and the implementation plan for architecture details that do not contradict the PRD.
 

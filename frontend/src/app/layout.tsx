@@ -18,6 +18,8 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 });
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'GiveCircle - Community Donation Platform',
   description: 'Connecting donors, recipients, and NGOs to share resources in local communities.',
