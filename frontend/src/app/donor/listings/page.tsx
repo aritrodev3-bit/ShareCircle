@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { getItems, createItem, deleteItem, getIncomingRequests, approveRequest, rejectRequest, confirmPickup, getMe } from '@/lib/api';
+import { getItems, createItem, deleteItem, getIncomingRequests, approveRequest, rejectRequest, confirmPickup, getMe, uploadItemImage } from '@/lib/api';
 import { ItemOut, RequestOut, UserOut, ItemCategory, ItemCondition } from '@/types';
 import ItemCard from '@/components/ItemCard';
 import RequestCard from '@/components/RequestCard';
@@ -40,6 +40,14 @@ export default function DonorDashboard() {
   const [addItemSuccess, setAddItemSuccess] = useState(false);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Approve Modal state
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
+  const [approveRequestId, setApproveRequestId] = useState<number | null>(null);
+  const [pickupLocationInput, setPickupLocationInput] = useState('');
+  const [approvingRequest, setApprovingRequest] = useState(false);
 
   // Alert message for request actions
   const [actionAlert, setActionAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -242,6 +250,30 @@ export default function DonorDashboard() {
     }
   };
 
+  // Image Upload Action
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    setUploadError(null);
+    try {
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
+      const data = await uploadItemImage(file, token);
+      setImageUrl(data.image_url);
+    } catch (err: any) {
+      console.error(err);
+      setUploadError(err.message || 'Image upload failed. Please try a different file or paste a URL.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   // Soft Delete Listing Action
   const handleRemoveListing = async (itemId: number) => {
     if (!confirm('Are you sure you want to remove this listing?')) return;
@@ -264,7 +296,15 @@ export default function DonorDashboard() {
   };
 
   // Workflow Actions
-  const handleApprove = async (reqId: number) => {
+  const handleApprove = (reqId: number) => {
+    setApproveRequestId(reqId);
+    setPickupLocationInput('');
+    setIsApproveModalOpen(true);
+  };
+
+  const submitApprove = async () => {
+    if (approveRequestId === null) return;
+    setApprovingRequest(true);
     try {
       const supabase = createClient();
       const {
@@ -273,13 +313,16 @@ export default function DonorDashboard() {
       const token = session?.access_token;
       if (!token) return;
 
-      await approveRequest(reqId, token);
+      await approveRequest(approveRequestId, token, pickupLocationInput.trim() || undefined);
       setActionAlert({ message: 'Request approved successfully.', type: 'success' });
+      setIsApproveModalOpen(false);
       fetchListings();
       fetchRequests();
     } catch (err: any) {
       console.error(err);
       setActionAlert({ message: err.message || 'Failed to approve request.', type: 'error' });
+    } finally {
+      setApprovingRequest(false);
     }
   };
 
@@ -512,9 +555,26 @@ export default function DonorDashboard() {
 
                 {/* Title */}
                 <div>
+                  <label htmlFor="itemTitle" className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wider">
+                    Item Title
+                  </label>
+                  <input
+                    id="itemTitle"
+                    type="text"
+                    required
+                    placeholder="e.g. Wooden Dining Table with 4 Chairs"
+                    className="focus-ring"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    disabled={submittingItem || generatingAi}
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
                   <div className="flex justify-between items-center mb-1.5">
-                    <label htmlFor="itemTitle" className="block text-xs font-medium text-text-secondary uppercase tracking-wider">
-                      Item Title
+                    <label htmlFor="itemDesc" className="block text-xs font-medium text-text-secondary uppercase tracking-wider">
+                      Description
                     </label>
                     {title.trim().length > 0 && (
                       <button
@@ -534,29 +594,6 @@ export default function DonorDashboard() {
                       </button>
                     )}
                   </div>
-                  <input
-                    id="itemTitle"
-                    type="text"
-                    required
-                    placeholder="e.g. Wooden Dining Table with 4 Chairs"
-                    className="focus-ring"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    disabled={submittingItem || generatingAi}
-                  />
-                  {aiError && (
-                    <div className="mt-1.5 bg-error/5 border border-error/20 text-error rounded-lg p-2 flex items-start space-x-2 text-xs">
-                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                      <span>{aiError}</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label htmlFor="itemDesc" className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wider">
-                    Description
-                  </label>
                   <textarea
                     id="itemDesc"
                     required
@@ -567,6 +604,12 @@ export default function DonorDashboard() {
                     onChange={(e) => setDescription(e.target.value)}
                     disabled={submittingItem}
                   />
+                  {aiError && (
+                    <div className="mt-1.5 bg-error/5 border border-error/20 text-error rounded-lg p-2 flex items-start space-x-2 text-xs">
+                      <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      <span>{aiError}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Category & Condition */}
@@ -660,20 +703,61 @@ export default function DonorDashboard() {
                   </div>
                 </div>
 
-                {/* Image URL */}
-                <div>
-                  <label htmlFor="itemImage" className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wider">
-                    Image URL (Optional)
-                  </label>
-                  <input
-                    id="itemImage"
-                    type="url"
-                    placeholder="https://example.com/image.jpg"
-                    className="focus-ring"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    disabled={submittingItem}
-                  />
+                {/* Image Upload / URL */}
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="itemImageFile" className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wider">
+                      Upload Item Image (Optional)
+                    </label>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        id="itemImageFile"
+                        type="file"
+                        accept="image/*"
+                        className="focus-ring text-xs file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-lime-500 file:text-bg-primary hover:file:opacity-90 cursor-pointer"
+                        onChange={handleImageUpload}
+                        disabled={submittingItem || uploadingImage}
+                      />
+                      {uploadingImage && (
+                        <div className="flex items-center space-x-1.5 text-xs text-lime-400">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          <span>Uploading...</span>
+                        </div>
+                      )}
+                    </div>
+                    {uploadError && (
+                      <p className="mt-1 text-xs text-error">{uploadError}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="itemImage" className="block text-xs font-medium text-text-secondary mb-1.5 uppercase tracking-wider">
+                      Or Paste Image URL (Optional)
+                    </label>
+                    <input
+                      id="itemImage"
+                      type="url"
+                      placeholder="https://example.com/image.jpg"
+                      className="focus-ring"
+                      value={imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      disabled={submittingItem || uploadingImage}
+                    />
+                  </div>
+
+                  {imageUrl && (
+                    <div className="mt-2 relative inline-block border border-border rounded-lg overflow-hidden bg-surface-1">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imageUrl} alt="Uploaded item preview" className="h-24 w-auto object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setImageUrl('')}
+                        className="absolute top-1 right-1 p-1 bg-bg-primary/80 rounded-full hover:bg-bg-primary text-text-secondary hover:text-text-primary border-none cursor-pointer"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Lat & Lng Geolocation */}
@@ -749,6 +833,63 @@ export default function DonorDashboard() {
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Approve Request Modal */}
+      {isApproveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-surface-1 border border-[rgba(167,209,41,0.16)] rounded-[14px] w-full max-w-md p-6 relative shadow-2xl animate-slideIn space-y-4">
+            <div>
+              <h2 className="font-serif text-xl font-medium text-text-primary mb-1">
+                Approve Request
+              </h2>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                Provide specific pickup instructions or a drop-off address for the recipient. If left empty, they will see the general listing location (City and Pincode).
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="pickupLocation" className="block text-xs font-semibold text-text-muted uppercase tracking-wider">
+                Pickup Location / Instructions (Optional)
+              </label>
+              <textarea
+                id="pickupLocation"
+                rows={3}
+                placeholder="e.g., Leave at the front lobby desk under GiveCircle label, or 123 Main St Apt 4B"
+                className="w-full bg-surface-2 border border-[rgba(167,209,41,0.08)] rounded-lg p-3 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-lime-500 transition-colors focus-ring"
+                value={pickupLocationInput}
+                onChange={(e) => setPickupLocationInput(e.target.value)}
+                disabled={approvingRequest}
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsApproveModalOpen(false)}
+                disabled={approvingRequest}
+                className="flex-1 bg-transparent text-text-secondary border border-olive-600 hover:bg-surface-hover py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-150 focus-ring cursor-pointer min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitApprove}
+                disabled={approvingRequest}
+                className="flex-1 bg-lime-500 hover:bg-lime-700 text-bg-primary py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-150 flex items-center justify-center space-x-2 focus-ring cursor-pointer min-h-[44px]"
+              >
+                {approvingRequest ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Approving...</span>
+                  </>
+                ) : (
+                  <span>Approve & Share</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

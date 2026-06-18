@@ -189,7 +189,7 @@ async def authenticate_user(
     token_user_id = read_int_claim(payload, "user_id")
     if token_user_id is not None and token_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if "role" in payload and payload["role"] != user.role.value:
+    if "role" in payload and payload["role"] not in ["authenticated", "anon"] and payload["role"] != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return access_token
 
@@ -255,10 +255,15 @@ async def exchange_google_code(
             detail="Inactive user",
         )
         
-    app_access_token = create_access_token(user)
+    real_access_token = auth_response.get("access_token")
+    if real_access_token:
+        app_access_token = real_access_token
+    else:
+        app_access_token = create_access_token(user)
     
     return {
         "access_token": app_access_token,
+        "refresh_token": auth_response.get("refresh_token"),
         "token_type": "bearer",
         "is_new_user": is_new_user,
         "user": user,
@@ -268,14 +273,35 @@ async def exchange_google_code(
 def decode_access_token(token: str) -> dict[str, Any]:
     settings = get_settings()
     try:
-        payload = jwt.decode(
-            token,
-            settings.supabase_jwt_secret,
-            algorithms=[settings.jwt_algorithm],
-        )
-    except ExpiredSignatureError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired") from exc
-    except InvalidTokenError as exc:
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "HS256")
+        
+        if alg == "ES256":
+            jwks_url = f"{str(settings.supabase_url).rstrip('/')}/auth/v1/.well-known/jwks.json"
+            jwks_client = jwt.PyJWKClient(jwks_url)
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+            payload = jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["ES256"],
+                options={"verify_aud": False},
+            )
+        else:
+            payload = jwt.decode(
+                token,
+                settings.supabase_jwt_secret,
+                algorithms=[settings.jwt_algorithm],
+            )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+        ) from exc
+    except Exception as exc:
+        import traceback
+        import sys
+        print(f"JWT Decode Exception: {exc}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
 
     if "sub" not in payload:
@@ -312,7 +338,7 @@ async def get_user_from_token(db: AsyncSession, token: str) -> User:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if token_user_id is not None and token_user_id != user.id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    if "role" in payload and payload["role"] != user.role.value:
+    if "role" in payload and payload["role"] not in ["authenticated", "anon"] and payload["role"] != user.role.value:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive user")

@@ -77,6 +77,11 @@ export interface RequestOut {
   cancelled_at: string | null;
   created_at: string;
   updated_at: string;
+  pickup_location: string | null;
+  item_city: string | null;
+  item_pincode: string | null;
+  item_lat: number | null;
+  item_lng: number | null;
 }
 
 export interface PaginatedResponse<T> {

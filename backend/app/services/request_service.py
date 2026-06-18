@@ -6,10 +6,34 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
+import struct
 from app.models.item import Item, ItemStatus
 from app.models.request import DonationRequest, RequestStatus
 from app.models.user import User, UserRole
 from app.schemas.request import RequestCreate, RequestOut
+
+
+def parse_wkb_point(wkb_data: bytes | str | None) -> tuple[float, float] | None:
+    if not wkb_data:
+        return None
+    if isinstance(wkb_data, str):
+        wkb_data = bytes.fromhex(wkb_data)
+    if len(wkb_data) < 21:
+        return None
+    byte_order = wkb_data[0]
+    fmt_prefix = "<" if byte_order == 1 else ">"
+    geom_type = struct.unpack(f"{fmt_prefix}I", wkb_data[1:5])[0]
+    has_srid = bool(geom_type & 0x20000000)
+    base_type = geom_type & 0x0FFFFFFF
+    if base_type != 1:
+        return None
+    offset = 5
+    if has_srid:
+        offset += 4
+    if len(wkb_data) < offset + 16:
+        return None
+    x, y = struct.unpack(f"{fmt_prefix}dd", wkb_data[offset:offset+16])
+    return x, y
 
 
 async def _load_request(db: AsyncSession, request_id: int) -> DonationRequest | None:
@@ -25,12 +49,27 @@ async def _load_request(db: AsyncSession, request_id: int) -> DonationRequest | 
 
 
 async def request_to_out(request: DonationRequest, current_user: User) -> RequestOut:
-    # Privacy: donor + approved/picked-up requester can see donor phone
-    can_see_phone = current_user.id == request.item.donor_id or (
+    # Privacy: donor + approved/picked-up requester can see donor phone and location details
+    can_see_details = current_user.id == request.item.donor_id or (
         current_user.id == request.requester_id
         and request.status in (RequestStatus.approved, RequestStatus.picked_up)
     )
-    donor_phone = request.item.donor.phone if can_see_phone else None
+    donor_phone = request.item.donor.phone if can_see_details else None
+
+    pickup_location = None
+    item_city = None
+    item_pincode = None
+    item_lat = None
+    item_lng = None
+
+    if can_see_details:
+        pickup_location = request.pickup_location
+        item_city = request.item.city
+        item_pincode = request.item.pincode
+        if request.item.location is not None and hasattr(request.item.location, "data"):
+            coords = parse_wkb_point(request.item.location.data)
+            if coords is not None:
+                item_lng, item_lat = coords
 
     # ngo_note visible only to the parties of the request
     ngo_note = request.ngo_note
@@ -54,6 +93,11 @@ async def request_to_out(request: DonationRequest, current_user: User) -> Reques
         cancelled_at=request.cancelled_at,
         created_at=request.created_at,
         updated_at=request.updated_at,
+        pickup_location=pickup_location,
+        item_city=item_city,
+        item_pincode=item_pincode,
+        item_lat=item_lat,
+        item_lng=item_lng,
     )
 
 
@@ -130,7 +174,9 @@ async def create_request(
     return loaded
 
 
-async def approve_request(db: AsyncSession, request_id: int, current_user: User) -> DonationRequest:
+async def approve_request(
+    db: AsyncSession, request_id: int, current_user: User, pickup_location: str | None = None
+) -> DonationRequest:
     # Transaction note: relies on SQLAlchemy's implicit transaction opened by get_db().
     # The sequence (lock request → lock item → mutate → commit) is atomic within the
     # single session yielded by the FastAPI dependency. If middleware ever introduces a
@@ -164,6 +210,7 @@ async def approve_request(db: AsyncSession, request_id: int, current_user: User)
 
     req.status = RequestStatus.approved
     req.approved_at = datetime.now(timezone.utc)
+    req.pickup_location = pickup_location
     item.status = ItemStatus.reserved
 
     # Auto-reject all other pending requests for this item

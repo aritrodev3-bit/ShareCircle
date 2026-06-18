@@ -145,6 +145,21 @@ input::placeholder, textarea::placeholder {
   color: var(--text-muted);
 }
 
+/* Custom class to prevent text overlap with leading icons */
+.input-with-icon {
+  padding-left: 40px !important;
+}
+
+/* Change Autocomplete/Autofill styles in Chrome/WebKit to match GiveCircle dark theme */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 /* Custom scrollbar matching GiveCircle theme */
 ::-webkit-scrollbar {
   width: 8px;

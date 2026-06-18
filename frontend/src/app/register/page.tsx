@@ -109,7 +109,7 @@ export default function RegisterPage() {
                   type="text"
                   required
                   placeholder="John Doe"
-                  className="!pl-10 focus-ring"
+                  className="input-with-icon focus-ring"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   disabled={loading}
@@ -131,7 +131,7 @@ export default function RegisterPage() {
                   type="email"
                   required
                   placeholder="john@example.com"
-                  className="!pl-10 focus-ring"
+                  className="input-with-icon focus-ring"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
@@ -153,7 +153,7 @@ export default function RegisterPage() {
                   type="password"
                   required
                   placeholder="•••••••• (Min. 8 characters)"
-                  className="!pl-10 focus-ring"
+                  className="input-with-icon focus-ring"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
@@ -193,7 +193,7 @@ export default function RegisterPage() {
                   id="phone"
                   type="tel"
                   placeholder="555-0199"
-                  className="!pl-10 focus-ring"
+                  className="input-with-icon focus-ring"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   disabled={loading}

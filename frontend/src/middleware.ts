@@ -45,6 +45,7 @@ export async function middleware(request: NextRequest) {
     isAuthPage ||
     isOnboardingPage ||
     path === '/' ||
+    path === '/auth/callback' ||
     path.startsWith('/_next') ||
     path.startsWith('/api/') ||
     path === '/favicon.ico';

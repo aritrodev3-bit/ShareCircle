@@ -1,6 +1,6 @@
 import { RequestOut, UserRole } from '@/types';
 import { StatusBadge } from './StatusBadge';
-import { Phone, Calendar, User, MessageSquare, AlertCircle } from 'lucide-react';
+import { Phone, Calendar, User, MessageSquare, AlertCircle, MapPin, ExternalLink, Navigation } from 'lucide-react';
 
 interface RequestCardProps {
   request: RequestOut;
@@ -86,6 +86,50 @@ export default function RequestCard({
             <span className="text-sm font-medium">
               Donor contact: <span className="text-text-primary select-all">{request.donor_phone}</span>
             </span>
+          </div>
+        )}
+
+        {/* Location Info (if approved) */}
+        {isApproved && (request.item_city || request.item_pincode || request.pickup_location) && (
+          <div className="bg-bg-secondary p-3 rounded-lg border border-[rgba(167,209,41,0.04)] mb-3 space-y-3">
+            {/* Listing Location */}
+            {(request.item_city || request.item_pincode) && (
+              <div className="flex items-start space-x-2">
+                <MapPin className="h-4 w-4 text-lime-400 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
+                    Listing Location
+                  </span>
+                  <p className="text-xs text-text-secondary font-medium">
+                    {request.item_city || 'N/A'}{request.item_pincode ? `, ${request.item_pincode}` : ''}
+                  </p>
+                  {request.item_lat !== null && request.item_lng !== null && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${request.item_lat},${request.item_lng}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center space-x-1 text-[11px] text-lime-400 hover:text-lime-300 mt-1 transition-colors font-medium hover:underline"
+                    >
+                      <span>View on Google Maps</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Drop-off / Pickup Instructions */}
+            <div className="flex items-start space-x-2 pt-2.5 border-t border-[rgba(167,209,41,0.06)]">
+              <Navigation className="h-4 w-4 text-lime-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block">
+                  Drop-off / Pickup Instructions
+                </span>
+                <p className="text-xs text-text-secondary mt-0.5 whitespace-pre-line leading-relaxed">
+                  {request.pickup_location || 'Pickup Location: Use listing location above'}
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

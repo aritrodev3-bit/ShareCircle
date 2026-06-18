@@ -130,8 +130,9 @@ async def callback_google(
             detail="Google authentication service error",
         ) from exc
 
+    refresh_token = result.get("refresh_token") or ""
     redirect_response = RedirectResponse(
-        url=f"{settings.frontend_oauth_redirect_url}#access_token={result['access_token']}&is_new_user={str(result['is_new_user']).lower()}"
+        url=f"{settings.frontend_oauth_redirect_url}#access_token={result['access_token']}&refresh_token={refresh_token}&is_new_user={str(result['is_new_user']).lower()}"
     )
     redirect_response.delete_cookie("sb-code-verifier")
     return redirect_response

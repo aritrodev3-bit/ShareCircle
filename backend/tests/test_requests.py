@@ -247,16 +247,25 @@ async def test_donor_phone_privacy():
             # Approve request
             approve_resp = await client.patch(
                 f"/api/requests/{req_id}/approve",
+                json={"pickup_location": "Front desk at 123 Main St"},
                 headers={"Authorization": f"Bearer {make_token(donor)}"},
             )
             assert approve_resp.status_code == 200
+            data = approve_resp.json()
+            assert data["pickup_location"] == "Front desk at 123 Main St"
+            assert data["item_city"] == "Bengaluru"
+            assert data["item_pincode"] == "560001"
 
-            # As requester after approval, phone is visible
+            # As requester after approval, phone & location are visible
             get_resp2 = await client.get(
                 f"/api/requests/{req_id}",
                 headers={"Authorization": f"Bearer {make_token(recipient)}"},
             )
-            assert get_resp2.json()["donor_phone"] is not None
+            data2 = get_resp2.json()
+            assert data2["donor_phone"] is not None
+            assert data2["pickup_location"] == "Front desk at 123 Main St"
+            assert data2["item_city"] == "Bengaluru"
+            assert data2["item_pincode"] == "560001"
 
     finally:
         await cleanup_users(email, donor_email)
