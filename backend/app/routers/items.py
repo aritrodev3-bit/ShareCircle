@@ -1,8 +1,11 @@
 from typing import Annotated
+import os
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.dependencies import get_db, get_optional_current_user, require_role
 from app.models.item import ItemCategory, ItemCondition, ItemStatus
 from app.models.user import User, UserRole
@@ -22,7 +25,8 @@ def validate_radius_filter(lat: float | None, lng: float | None, radius_km: floa
         )
 
 
-@router.post("/", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ItemOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ItemOut, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 async def create_item(
     item_create: ItemCreate,
     donor: Annotated[User, Depends(require_role(UserRole.donor))],
@@ -32,7 +36,8 @@ async def create_item(
     return item_service.item_to_out(item)
 
 
-@router.get("/", response_model=PaginatedResponse[ItemOut])
+@router.get("", response_model=PaginatedResponse[ItemOut])
+@router.get("/", response_model=PaginatedResponse[ItemOut], include_in_schema=False)
 async def list_items(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User | None, Depends(get_optional_current_user)],
@@ -89,3 +94,31 @@ async def delete_item(
 ) -> ItemOut:
     item = await item_service.remove_item(db, item_id, donor)
     return item_service.item_to_out(item)
+
+
+@router.post("/upload")
+async def upload_image(
+    file: UploadFile = File(...),
+    donor: Annotated[User, Depends(require_role(UserRole.donor))] = None,
+) -> dict[str, str]:
+    # Ensure static uploads directory exists
+    os.makedirs("app/static/uploads", exist_ok=True)
+    
+    # Generate unique filename
+    file_extension = os.path.splitext(file.filename or "")[1]
+    # Fallback to .jpg if no extension
+    if not file_extension:
+        file_extension = ".jpg"
+        
+    new_filename = f"{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join("app/static/uploads", new_filename)
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+        
+    # Generate URL
+    settings = get_settings()
+    public_url = f"{str(settings.api_public_url).rstrip('/')}/static/uploads/{new_filename}"
+    return {"image_url": public_url}

@@ -10,7 +10,12 @@ class Base(DeclarativeBase):
 
 
 settings = get_settings()
-engine = create_async_engine(str(settings.database_url), pool_pre_ping=True, poolclass=NullPool)
+engine = create_async_engine(
+    str(settings.database_url),
+    pool_pre_ping=True,
+    poolclass=NullPool,
+    connect_args={"statement_cache_size": 0},
+)
 async_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,

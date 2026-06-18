@@ -6,6 +6,7 @@ GeoAlchemy2==0.15.2
 alembic==1.13.2
 pydantic-settings==2.3.4
 PyJWT==2.10.1
+cryptography>=42.0.5
 redis==5.0.7
 celery==5.4.0
 resend==2.4.0

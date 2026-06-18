@@ -35,6 +35,7 @@ class DonationRequest(Base):
         index=True,
     )
     pickup_scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pickup_location: Mapped[str | None] = mapped_column(Text)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

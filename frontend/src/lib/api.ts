@@ -24,7 +24,7 @@ import {
 
 const isServer = typeof window === 'undefined' || process.env.NODE_ENV === 'test';
 const BASE_URL = isServer
-  ? (process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000')
+  ? (process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://api:8000')
   : '';
 
 export class ApiError extends Error {
@@ -270,10 +270,11 @@ export async function getOutgoingRequests(token?: string): Promise<RequestOut[]>
   });
 }
 
-export async function approveRequest(id: number, token?: string): Promise<RequestOut> {
+export async function approveRequest(id: number, token?: string, pickupLocation?: string): Promise<RequestOut> {
   return apiRequest<RequestOut>(`/api/requests/${id}/approve`, {
     method: 'PATCH',
     token,
+    body: JSON.stringify({ pickup_location: pickupLocation || null }),
   });
 }
 
@@ -369,5 +370,19 @@ export async function getSuggestions(
   return apiRequest<SuggestionItem[]>(path, {
     method: 'GET',
     token: resolvedToken,
+  });
+}
+
+/**
+ * Upload an image file for a listing
+ */
+export async function uploadItemImage(file: File, token?: string): Promise<{ image_url: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return apiRequest<{ image_url: string }>('/api/items/upload', {
+    method: 'POST',
+    body: formData,
+    token,
   });
 }

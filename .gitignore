@@ -8,3 +8,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .codex-manual-cache/
+
+# Local uploads
+backend/app/static/uploads/
+
+# Scratch files
+backend/test_ai.py
