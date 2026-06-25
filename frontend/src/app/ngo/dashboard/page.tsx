@@ -367,28 +367,23 @@ export default function NgoDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {suggestions.map((item) => (
-                <div key={item.id} className="relative">
-                  {/* Score badge top-right */}
-                  <span className="absolute top-2 right-2 bg-info/15 text-info border border-info/20 text-[10px] font-medium px-2 py-0.5 rounded-full z-10">
-                    Match score: {Math.round(item.score * 100)}%
-                  </span>
-                  <ItemCard
-                    item={{
-                      ...item,
-                      description: '',
-                      donor_id: 0,
-                      quantity: 1,
-                      status: 'available',
-                      pincode: '',
-                      donated_at: null,
-                      removed_at: null,
-                      updated_at: '',
-                    }}
-                    showRequestButton={true}
-                    onRequestClick={() => alert('To request, go to the general Browse tab and select this item.')}
-                  />
-                </div>
+               {suggestions.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  item={{
+                    ...item,
+                    description: '',
+                    donor_id: 0,
+                    quantity: 1,
+                    status: 'available',
+                    pincode: '',
+                    donated_at: null,
+                    removed_at: null,
+                    updated_at: '',
+                  }}
+                  showRequestButton={true}
+                  onRequestClick={() => alert('To request, go to the general Browse tab and select this item.')}
+                />
               ))}
             </div>
           )}

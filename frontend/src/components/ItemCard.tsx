@@ -49,7 +49,14 @@ export default function ItemCard({
           <h3 className="font-serif text-base font-medium text-text-primary leading-snug">
             {item.title}
           </h3>
-          <StatusBadge status={item.status} />
+          <div className="flex flex-col items-end gap-1.5 shrink-0">
+            <StatusBadge status={item.status} />
+            {(item as any).score !== undefined && (
+              <span className="bg-info/15 text-info border border-info/20 text-[10px] font-medium px-2 py-0.5 rounded-full whitespace-nowrap">
+                Match: {Math.round((item as any).score * 100)}%
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Category Badge */}

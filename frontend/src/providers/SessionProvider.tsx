@@ -34,6 +34,9 @@ export function SessionProvider({
     try {
       const p = await getMe(accessToken);
       setProfile(p);
+      if (p) {
+        document.cookie = `user-role=${p.role ?? 'null'}; path=/; max-age=86400; SameSite=Lax`;
+      }
     } catch (err) {
       console.error('Failed to fetch user profile:', err);
       setProfile(null);
@@ -104,6 +107,12 @@ export function SessionProvider({
       subscription.unsubscribe();
     };
   }, [initialProfile]);
+
+  useEffect(() => {
+    if (profile) {
+      document.cookie = `user-role=${profile.role ?? 'null'}; path=/; max-age=86400; SameSite=Lax`;
+    }
+  }, [profile]);
 
   return (
     <SessionContext.Provider value={{ session, user, profile, loading, refreshSession }}>
