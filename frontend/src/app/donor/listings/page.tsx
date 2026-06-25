@@ -52,6 +52,19 @@ export default function DonorDashboard() {
   // Alert message for request actions
   const [actionAlert, setActionAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
+  // Confirmation Modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
   // Categories & Conditions lists
   const categories: ItemCategory[] = [
     'clothing',
@@ -275,24 +288,32 @@ export default function DonorDashboard() {
   };
 
   // Soft Delete Listing Action
-  const handleRemoveListing = async (itemId: number) => {
-    if (!confirm('Are you sure you want to remove this listing?')) return;
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
+  const handleRemoveListing = (itemId: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Remove Listing',
+      message: 'Are you sure you want to remove this listing? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          const supabase = createClient();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          if (!token) return;
 
-      await deleteItem(itemId, token);
-      setActionAlert({ message: 'Listing successfully removed.', type: 'success' });
-      fetchListings();
-      fetchRequests();
-    } catch (err: any) {
-      console.error(err);
-      setActionAlert({ message: err.message || 'Failed to remove listing.', type: 'error' });
-    }
+          await deleteItem(itemId, token);
+          setActionAlert({ message: 'Listing successfully removed.', type: 'success' });
+          fetchListings();
+          fetchRequests();
+        } catch (err: any) {
+          console.error(err);
+          setActionAlert({ message: err.message || 'Failed to remove listing.', type: 'error' });
+        } finally {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   // Workflow Actions
@@ -326,24 +347,32 @@ export default function DonorDashboard() {
     }
   };
 
-  const handleReject = async (reqId: number) => {
-    if (!confirm('Are you sure you want to reject this request?')) return;
-    try {
-      const supabase = createClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
+  const handleReject = (reqId: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: 'Reject Request',
+      message: 'Are you sure you want to reject this request?',
+      onConfirm: async () => {
+        try {
+          const supabase = createClient();
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+          const token = session?.access_token;
+          if (!token) return;
 
-      await rejectRequest(reqId, token);
-      setActionAlert({ message: 'Request rejected.', type: 'success' });
-      fetchListings();
-      fetchRequests();
-    } catch (err: any) {
-      console.error(err);
-      setActionAlert({ message: err.message || 'Failed to reject request.', type: 'error' });
-    }
+          await rejectRequest(reqId, token);
+          setActionAlert({ message: 'Request rejected.', type: 'success' });
+          fetchListings();
+          fetchRequests();
+        } catch (err: any) {
+          console.error(err);
+          setActionAlert({ message: err.message || 'Failed to reject request.', type: 'error' });
+        } finally {
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   };
 
   const handleConfirmPickup = async (reqId: number) => {
@@ -888,6 +917,39 @@ export default function DonorDashboard() {
                 ) : (
                   <span>Approve & Share</span>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-surface-1 border border-[rgba(167,209,41,0.16)] rounded-[14px] w-full max-w-md p-6 relative shadow-2xl animate-slideIn space-y-4">
+            <div>
+              <h2 className="font-serif text-xl font-medium text-text-primary mb-1">
+                {confirmModal.title}
+              </h2>
+              <p className="text-sm text-text-secondary leading-relaxed">
+                {confirmModal.message}
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+                className="flex-1 bg-transparent text-text-secondary border border-olive-600 hover:bg-surface-hover py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-150 focus-ring cursor-pointer min-h-[44px]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmModal.onConfirm}
+                className="flex-1 bg-lime-500 hover:bg-lime-700 text-bg-primary py-2.5 px-4 rounded-lg text-sm font-medium transition-all duration-150 flex items-center justify-center space-x-2 focus-ring cursor-pointer min-h-[44px]"
+              >
+                <span>Confirm</span>
               </button>
             </div>
           </div>
